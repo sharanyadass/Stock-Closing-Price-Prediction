@@ -1,0 +1,85 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, LSTM
+from tensorflow.keras.callbacks import EarlyStopping
+
+# 1. Load Data
+df = pd.read_csv('AAPL.csv')  # Replace with your actual CSV file path
+df['Date'] = pd.to_datetime(df['Date'])
+df.set_index('Date', inplace=True)
+
+# 2. Visualize the Closing Prices
+plt.figure(figsize=(14,5))
+plt.plot(df['Close'], label='Close Price history')
+plt.title('Stock Closing Price History')
+plt.xlabel('Date')
+plt.ylabel('Close Price')
+plt.legend()
+plt.show()
+
+# 3. Preprocess Data
+data = df['Close'].values.reshape(-1, 1)
+scaler = MinMaxScaler(feature_range=(0, 1))
+scaled_data = scaler.fit_transform(data)
+
+# 4. Create Training and Test Data
+training_data_len = int(np.ceil(0.8 * len(scaled_data)))
+train_data = scaled_data[:training_data_len]
+test_data = scaled_data[training_data_len - 60:]
+
+# 5. Create Windowed Sequences
+def create_sequences(data, seq_length):
+    X = []
+    y = []
+    for i in range(seq_length, len(data)):
+        X.append(data[i-seq_length:i, 0])
+        y.append(data[i, 0])
+    return np.array(X), np.array(y)
+
+seq_length = 60  # Use past 60 days to predict next day
+X_train, y_train = create_sequences(train_data, seq_length)
+X_test, y_test = create_sequences(test_data, seq_length)
+
+X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
+X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
+
+# 6. Build Model
+model = Sequential([
+    LSTM(50, return_sequences=True, input_shape=(X_train.shape[1], 1)),
+    LSTM(50, return_sequences=False),
+    Dense(25),
+    Dense(1)
+])
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+# 7. Train Model
+early_stop = EarlyStopping(monitor='val_loss', patience=10)
+history = model.fit(
+    X_train, y_train, 
+    batch_size=32, 
+    epochs=50,
+    validation_data=(X_test, y_test),
+    callbacks=[early_stop]
+)
+
+# 8. Predict and Inverse Transform
+predictions = model.predict(X_test)
+predictions = scaler.inverse_transform(predictions.reshape(-1, 1))
+y_test_actual = scaler.inverse_transform(y_test.reshape(-1, 1))
+
+# 9. Visualize Results
+plt.figure(figsize=(14,5))
+plt.plot(df.index[-len(y_test_actual):], y_test_actual, label='Actual Closing Price')
+plt.plot(df.index[-len(predictions):], predictions, label='Predicted Closing Price')
+plt.title('Stock Closing Price Prediction')
+plt.xlabel('Date')
+plt.ylabel('Close Price')
+plt.legend()
+plt.show()
+
+# 10. Calculate RMSE
+rmse = np.sqrt(np.mean(predictions - y_test_actual) ** 2)
+print(f"Root Mean Squared Error: {rmse:.2f}")
