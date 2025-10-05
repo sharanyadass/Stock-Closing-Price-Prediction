@@ -9,7 +9,7 @@ from tensorflow.keras.layers import Dense, LSTM
 from tensorflow.keras.callbacks import EarlyStopping
 
 # 1. Load Data
-df = pd.read_csv('AAPL.csv')  # Replace with your actual CSV file path
+df = pd.read_csv('AAPL.csv')  
 df['Date'] = pd.to_datetime(df['Date'])
 df.set_index('Date', inplace=True)
 
